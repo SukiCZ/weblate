@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os.path
 from io import StringIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import cairo
 import gi
@@ -29,8 +29,8 @@ from weblate.trans.templatetags.translations import number_format
 from weblate.trans.util import sort_unicode
 from weblate.utils.site import get_site_url
 from weblate.utils.stats import (
-    BaseStats,
     GlobalStats,
+    LanguageStats,
     ProjectLanguage,
     ProjectLanguageStats,
     TranslationStats,
@@ -38,7 +38,11 @@ from weblate.utils.stats import (
 from weblate.utils.views import get_percent_color
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from django_stubs_ext import StrOrPromise
+
+MultiLanguageStatsType = ProjectLanguageStats | TranslationStats | LanguageStats
 
 gi.require_version("PangoCairo", "1.0")
 gi.require_version("Pango", "1.0")
@@ -73,7 +77,7 @@ class Widget:
     content_type = "image/png"
     order = 100
 
-    def __init__(self, obj, color=None, lang=None) -> None:
+    def __init__(self, obj, color=None, lang=None, *args, **kwargs) -> None:
         """Create Widget object."""
         # Get object and related params
         self.obj = obj
@@ -115,9 +119,9 @@ class BitmapWidget(Widget):
     column_offset = 0
     lines = True
 
-    def __init__(self, obj, color=None, lang=None) -> None:
+    def __init__(self, obj, color=None, lang=None, *args, **kwargs) -> None:
         """Create Widget object."""
-        super().__init__(obj, color, lang)
+        super().__init__(obj, color, lang, *args, **kwargs)
         # Get object and related params
         if isinstance(self.stats, TranslationStats):
             self.total = self.stats.all
@@ -421,26 +425,53 @@ class MultiLanguageWidget(SVGWidget):
     name = "multi"
     order = 81
     colors: tuple[str, ...] = ("auto", "red", "green", "blue")
+    ordering_functions: dict[
+        str, Callable[[list[MultiLanguageStatsType], bool], Any]
+    ] = {
+        "language": lambda x, r: sort_unicode(
+            x, key=lambda y: str(y.language), reverse=r
+        ),
+        "percent": lambda x, r: sorted(
+            x, key=lambda y: y.translated_percent, reverse=r
+        ),
+    }
     template_name = "svg/multi-language-badge.svg"
     verbose = pgettext_lazy("Status widget name", "Vertical language bar chart")
 
     COLOR_MAP = {"red": "#fa3939", "green": "#3fed48", "blue": "#3f85ed", "auto": None}
+
+    def __init__(
+        self, obj, color=None, lang=None, ordering=None, *args, **kwargs
+    ) -> None:
+        """Create Widget object."""
+        super().__init__(obj, color, lang, *args, **kwargs)
+        # Get ordering of languages
+        self.ordering_key, self.reverse_ordering = self.get_ordering(ordering)
+
+    def get_ordering(self, ordering: str | None) -> tuple[str, bool]:
+        """Return ordering based on allowed ones and bool for reversed."""
+        if ordering:
+            reverse = ordering.startswith("-")
+            if reverse:
+                ordering = ordering[1:]
+            if ordering in self.ordering_functions:
+                return ordering, reverse
+        return next(iter(self.ordering_functions.keys())), False
 
     def render(self, response) -> None:
         translations = []
         offset = 20
         color = self.COLOR_MAP[self.color]
         language_width = 190
-        languages: list[BaseStats | ProjectLanguage]
+        languages: list[MultiLanguageStatsType]
         if isinstance(self.stats, ProjectLanguageStats | TranslationStats):
             languages = [self.stats]
-        elif isinstance(self.obj, ProjectLanguage):
-            languages = [self.obj]
         elif isinstance(self.obj, Language):
             languages = [self.obj.stats]
         else:
             languages = self.stats.get_language_stats()
-        for stats in sort_unicode(languages, lambda x: str(x.language)):
+        ordering_function = self.ordering_functions[self.ordering_key]
+        for stats in ordering_function(languages, self.reverse_ordering):
             # Skip empty translations
             if stats.translated == 0:
                 continue

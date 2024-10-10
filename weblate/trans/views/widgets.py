@@ -166,6 +166,8 @@ def render_widget(
     else:
         try_set_language("en")
 
+    ordering = request.GET.get("o")
+
     # Get widget class
     try:
         widget_class = WIDGETS[widget]
@@ -173,7 +175,7 @@ def render_widget(
         raise Http404 from error
 
     # Construct object
-    widget_obj = widget_class(obj, color, lang)
+    widget_obj = widget_class(obj, color, lang, ordering)
 
     # Invalid extension
     if extension != widget_obj.extension or color != widget_obj.color:
