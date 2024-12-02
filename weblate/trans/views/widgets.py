@@ -79,7 +79,16 @@ def widgets(request: AuthenticatedHttpRequest, path: list[str]):
                     "extension": widget_class.extension,
                 },
             )
-            color_list.append({"name": color, "url": get_site_url(color_url)})
+            if widget_class.ordering_options:
+                color_list = [
+                    {
+                        "name": f"{color} ({ordering})",
+                        "url": get_site_url(f"{color_url}?o={ordering}"),
+                    }
+                    for ordering in widget_class.ordering_options
+                ]
+            else:
+                color_list.append({"name": color, "url": get_site_url(color_url)})
         widget_list.append(
             {"name": widget_name, "colors": color_list, "verbose": widget_class.verbose}
         )

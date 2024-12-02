@@ -73,6 +73,7 @@ class Widget:
     name = ""
     verbose: StrOrPromise = ""
     colors: tuple[str, ...] = ()
+    ordering_options: dict[str, str] = {}
     extension = "png"
     content_type = "image/png"
     order = 100
@@ -425,6 +426,12 @@ class MultiLanguageWidget(SVGWidget):
     name = "multi"
     order = 81
     colors: tuple[str, ...] = ("auto", "red", "green", "blue")
+    ordering_options = {
+        "language": "↓ %s".format(),
+        "-language": "↑ %s".format(),
+        "percent": "↓ %s".format(),
+        "-percent": "↑ %s".format(),
+    }
     ordering_functions: dict[
         str, Callable[[list[MultiLanguageStatsType], bool], Any]
     ] = {
